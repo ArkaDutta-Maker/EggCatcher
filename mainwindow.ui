@@ -1,0 +1,520 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>800</width>
+    <height>800</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>MainWindow</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <widget class="my_label" name="frame">
+    <property name="geometry">
+     <rect>
+      <x>20</x>
+      <y>10</y>
+      <width>500</width>
+      <height>500</height>
+     </rect>
+    </property>
+    <property name="sizePolicy">
+     <sizepolicy hsizetype="Maximum" vsizetype="Maximum">
+      <horstretch>0</horstretch>
+      <verstretch>0</verstretch>
+     </sizepolicy>
+    </property>
+    <property name="minimumSize">
+     <size>
+      <width>500</width>
+      <height>500</height>
+     </size>
+    </property>
+    <property name="maximumSize">
+     <size>
+      <width>4000</width>
+      <height>4000</height>
+     </size>
+    </property>
+    <property name="sizeIncrement">
+     <size>
+      <width>50</width>
+      <height>50</height>
+     </size>
+    </property>
+    <property name="baseSize">
+     <size>
+      <width>500</width>
+      <height>500</height>
+     </size>
+    </property>
+    <property name="text">
+     <string>TextLabel</string>
+    </property>
+   </widget>
+   <widget class="QWidget" name="layoutWidget">
+    <property name="geometry">
+     <rect>
+      <x>620</x>
+      <y>20</y>
+      <width>190</width>
+      <height>568</height>
+     </rect>
+    </property>
+    <layout class="QGridLayout" name="gridLayout">
+     <item row="12" column="0">
+      <widget class="QComboBox" name="reflect_select">
+       <item>
+        <property name="text">
+         <string>Reflect wrt X-axis</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Reflect wrt Y-axis</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Reflect wrt line</string>
+        </property>
+       </item>
+      </widget>
+     </item>
+     <item row="11" column="0">
+      <widget class="QPushButton" name="shear_button">
+       <property name="text">
+        <string>Shear</string>
+       </property>
+      </widget>
+     </item>
+     <item row="20" column="0">
+      <widget class="QComboBox" name="clip_algo_select">
+       <item>
+        <property name="text">
+         <string>Cohen Sutherland Algorithm</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Liang-Barsky Algorithm</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Sutherland Hodgeman Algorithm</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Weiler-Atherton Algorithm</string>
+        </property>
+       </item>
+      </widget>
+     </item>
+     <item row="8" column="0">
+      <widget class="QComboBox" name="rotate_select">
+       <item>
+        <property name="text">
+         <string>Rotate about origin</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Rotate about lastpoint</string>
+        </property>
+       </item>
+      </widget>
+     </item>
+     <item row="16" column="0">
+      <widget class="QSpinBox" name="input_angle">
+       <property name="prefix">
+        <string>Angle: </string>
+       </property>
+       <property name="minimum">
+        <number>-360</number>
+       </property>
+       <property name="maximum">
+        <number>360</number>
+       </property>
+      </widget>
+     </item>
+     <item row="10" column="0">
+      <widget class="QPushButton" name="scale_button">
+       <property name="text">
+        <string>Scale</string>
+       </property>
+      </widget>
+     </item>
+     <item row="13" column="0">
+      <widget class="QPushButton" name="reflect_button">
+       <property name="text">
+        <string>Reflect</string>
+       </property>
+      </widget>
+     </item>
+     <item row="14" column="0">
+      <widget class="QSpinBox" name="input_dx">
+       <property name="prefix">
+        <string>dx: </string>
+       </property>
+       <property name="minimum">
+        <number>-500</number>
+       </property>
+       <property name="maximum">
+        <number>500</number>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="0">
+      <widget class="QPushButton" name="clear_fill">
+       <property name="text">
+        <string>Clear Fill</string>
+       </property>
+      </widget>
+     </item>
+     <item row="17" column="0">
+      <widget class="QDoubleSpinBox" name="input_sx">
+       <property name="prefix">
+        <string>Sx: </string>
+       </property>
+       <property name="decimals">
+        <number>2</number>
+       </property>
+       <property name="minimum">
+        <double>0.100000000000000</double>
+       </property>
+       <property name="maximum">
+        <double>5.000000000000000</double>
+       </property>
+       <property name="singleStep">
+        <double>0.100000000000000</double>
+       </property>
+       <property name="value">
+        <double>1.000000000000000</double>
+       </property>
+      </widget>
+     </item>
+     <item row="15" column="0">
+      <widget class="QSpinBox" name="input_dy">
+       <property name="prefix">
+        <string>dy: </string>
+       </property>
+       <property name="minimum">
+        <number>-500</number>
+       </property>
+       <property name="maximum">
+        <number>500</number>
+       </property>
+      </widget>
+     </item>
+     <item row="6" column="0">
+      <widget class="QSpinBox" name="radius_ry">
+       <property name="toolTip">
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;50&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       </property>
+       <property name="whatsThis">
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;radius&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       </property>
+       <property name="prefix">
+        <string>Radius(Ry): </string>
+       </property>
+       <property name="minimum">
+        <number>5</number>
+       </property>
+       <property name="maximum">
+        <number>500</number>
+       </property>
+       <property name="value">
+        <number>5</number>
+       </property>
+      </widget>
+     </item>
+     <item row="7" column="0">
+      <widget class="QPushButton" name="translate_button">
+       <property name="text">
+        <string>Translate</string>
+       </property>
+      </widget>
+     </item>
+     <item row="4" column="0">
+      <widget class="QSpinBox" name="radius">
+       <property name="toolTip">
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;50&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       </property>
+       <property name="whatsThis">
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;radius&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       </property>
+       <property name="prefix">
+        <string>Radius: </string>
+       </property>
+       <property name="minimum">
+        <number>5</number>
+       </property>
+       <property name="maximum">
+        <number>500</number>
+       </property>
+       <property name="value">
+        <number>5</number>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="0">
+      <widget class="QPushButton" name="clear">
+       <property name="text">
+        <string>Clear</string>
+       </property>
+      </widget>
+     </item>
+     <item row="18" column="0">
+      <widget class="QDoubleSpinBox" name="input_sy">
+       <property name="prefix">
+        <string>Sy: </string>
+       </property>
+       <property name="decimals">
+        <number>2</number>
+       </property>
+       <property name="minimum">
+        <double>0.100000000000000</double>
+       </property>
+       <property name="maximum">
+        <double>5.000000000000000</double>
+       </property>
+       <property name="singleStep">
+        <double>0.100000000000000</double>
+       </property>
+       <property name="value">
+        <double>1.000000000000000</double>
+       </property>
+      </widget>
+     </item>
+     <item row="3" column="0">
+      <widget class="QSpinBox" name="grid_size">
+       <property name="toolTip">
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;50&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       </property>
+       <property name="prefix">
+        <string>Grid Size: </string>
+       </property>
+       <property name="minimum">
+        <number>1</number>
+       </property>
+       <property name="maximum">
+        <number>500</number>
+       </property>
+      </widget>
+     </item>
+     <item row="9" column="0">
+      <widget class="QPushButton" name="rotate_button">
+       <property name="text">
+        <string>Rotate</string>
+       </property>
+      </widget>
+     </item>
+     <item row="5" column="0">
+      <widget class="QSpinBox" name="radius_rx">
+       <property name="toolTip">
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;50&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       </property>
+       <property name="whatsThis">
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;radius&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       </property>
+       <property name="prefix">
+        <string>Radius(Rx): </string>
+       </property>
+       <property name="minimum">
+        <number>5</number>
+       </property>
+       <property name="maximum">
+        <number>500</number>
+       </property>
+       <property name="value">
+        <number>5</number>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="0">
+      <widget class="QComboBox" name="algo_select">
+       <item>
+        <property name="text">
+         <string>BLA</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>DDA</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Scan Line</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Flood Fill 4</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Flood Fill 8</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Boundary Fill 4</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Boundary Fill 8</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Midpoint</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Cartesian</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Polar</string>
+        </property>
+       </item>
+      </widget>
+     </item>
+     <item row="21" column="0">
+      <widget class="QPushButton" name="clip_button">
+       <property name="text">
+        <string>Clip Line/Polygon</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </widget>
+   <widget class="QWidget" name="horizontalLayoutWidget">
+    <property name="geometry">
+     <rect>
+      <x>20</x>
+      <y>680</y>
+      <width>771</width>
+      <height>61</height>
+     </rect>
+    </property>
+    <layout class="QHBoxLayout" name="horizontalLayout">
+     <item>
+      <widget class="QLabel" name="mouse_movement">
+       <property name="text">
+        <string>No Grid Data</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="mouse_pressed">
+       <property name="text">
+        <string>No Press Data</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="time_algo">
+       <property name="text">
+        <string>No Algorithm ran</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </widget>
+   <widget class="QWidget" name="horizontalLayoutWidget_2">
+    <property name="geometry">
+     <rect>
+      <x>20</x>
+      <y>600</y>
+      <width>771</width>
+      <height>80</height>
+     </rect>
+    </property>
+    <layout class="QHBoxLayout" name="horizontalLayout_2">
+     <item>
+      <widget class="QPushButton" name="draw_grid">
+       <property name="text">
+        <string>Draw Grid</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="set_clipping_window">
+       <property name="text">
+        <string>Set Clipping Window</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="start_polygon">
+       <property name="text">
+        <string>Start Polygon</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="fill_polygon">
+       <property name="text">
+        <string>Fill Polygon</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="draw_line">
+       <property name="text">
+        <string>Draw Line</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="draw_circle">
+       <property name="text">
+        <string>Draw Circle</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="draw_ellipse">
+       <property name="text">
+        <string>Draw Ellipse</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </widget>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>800</width>
+     <height>20</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>my_label</class>
+   <extends>QLabel</extends>
+   <header>my_label.h</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>
