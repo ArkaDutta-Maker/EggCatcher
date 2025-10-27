@@ -10,6 +10,8 @@ MainWindow::MainWindow(QWidget *parent)
     moveLeft(false), moveRight(false)
 {
     ui->setupUi(this);
+    setFocusPolicy(Qt::StrongFocus);
+
 
     // --- Grid setup ---
     grid_box = 20;
