@@ -164,6 +164,7 @@ void MainWindow::updatePhysics(float dt) {
             }
         }
 
+
         if (!caught)
             newEggs.push_back(egg);
     }
