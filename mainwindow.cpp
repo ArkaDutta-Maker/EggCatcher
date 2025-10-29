@@ -58,7 +58,19 @@ MainWindow::~MainWindow() {
 
 void MainWindow::keyPressEvent(QKeyEvent *event) {
     if (event->isAutoRepeat()) return;
+
+    if (gameOver && event->key() == Qt::Key_R) {
+        resetGame();
+        return;
+    }
+
+    if (!gameRunning && event->key() == Qt::Key_Return) {
+        gameRunning = true;
+        return;
+    }
+
     if (gameOver) return;
+    if (!gameRunning) return;
 
     if (event->key() == Qt::Key_A)
         moveLeft = true;
@@ -68,6 +80,7 @@ void MainWindow::keyPressEvent(QKeyEvent *event) {
 
 void MainWindow::keyReleaseEvent(QKeyEvent *event) {
     if (event->isAutoRepeat()) return;
+    if (!gameRunning || gameOver) return;
     if (gameOver) return;
 
     if (event->key() == Qt::Key_A)
@@ -76,8 +89,32 @@ void MainWindow::keyReleaseEvent(QKeyEvent *event) {
         moveRight = false;
 }
 
+void MainWindow::resetGame() {
+    score = 0;
+    lives = 3;
+    eggs.clear();
+    basket = QPointF(cols / 2.0f, rows - 3);
+    basketXVelocity = 0.0f;
+    basketTargetVel = 0.0f;
+    gameOver = false;
+    accumulator = 0.0f;
+    frameClock.restart();
+    gameRunning = true;
+    gameTimer->start();
+}
+
+
 void MainWindow::gameTick() {
-    if (gameOver) return;
+    if (gameOver) {
+        drawGameOver();
+        return;
+    }
+
+    // If game hasn't started yet → just draw start screen
+    if (!gameRunning) {
+        drawStartScreen();
+        return;
+    }
 
     float dt = frameClock.restart() / 1000.0f;
     accumulator += dt;
@@ -98,12 +135,26 @@ void MainWindow::gameTick() {
     }
 }
 
+void MainWindow::drawStartScreen() {
+    QPixmap pix = background;
+    QPainter p(&pix);
+
+    p.setPen(Qt::white);
+    p.setFont(QFont("Arial", 20, QFont::Bold));
+    p.drawText(pix.rect(), Qt::AlignCenter,
+               "EGG CATCHER\n\nPress ENTER to Start");
+
+    p.end();
+    ui->frame->setPixmap(pix);
+}
+
+
 void MainWindow::drawGameOver() {
     QPixmap pix = background;
     QPainter p(&pix);
     p.setPen(Qt::red);
     p.setFont(QFont("Arial", 24, QFont::Bold));
-    p.drawText(pix.rect(), Qt::AlignCenter, "GAME OVER");
+    p.drawText(pix.rect(), Qt::AlignCenter, "GAME OVER\nPress R to Restart");
     p.end();
     ui->frame->setPixmap(pix);
 }

@@ -31,7 +31,10 @@ private:
     Ui::MainWindow *ui;
     void drawGame(float alpha);
     void drawGameOver();
+    void resetGame();
+    void drawStartScreen();
     bool gameOver;
+    bool gameRunning = false;
     // --- Grid / display ---
     int grid_box;
     int grid_size;
