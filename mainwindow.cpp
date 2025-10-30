@@ -43,10 +43,10 @@ MainWindow::MainWindow(QWidget *parent)
     basketMaxVel = 12.0f;
 
     // -- Load sound files
-    soundCatch.setSource(QUrl(""));
+    soundCatch.setSource(QUrl::fromLocalFile("sounds/catch.wav"));
     soundCatch.setVolume(0.8f);   // 0.0 – 1.0
 
-    soundLose.setSource(QUrl(""));
+    soundLose.setSource(QUrl::fromLocalFile("sounds/lose.wav"));
     soundLose.setVolume(0.9f);
 
     // --- Timer setup ---
