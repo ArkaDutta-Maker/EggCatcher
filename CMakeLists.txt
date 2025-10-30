@@ -11,7 +11,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ---- Detect and find Qt version ----
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Gui Widgets Multimedia)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -39,7 +39,7 @@ else()
 endif()
 
 # ---- Link libraries ----
-target_link_libraries(EggCatcher PRIVATE Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Gui Qt${QT_VERSION_MAJOR}::Widgets)
+target_link_libraries(EggCatcher PRIVATE Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Gui Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Multimedia)
 
 # ---- macOS/iOS Bundle ----
 if(DEFINED QT_VERSION AND QT_VERSION VERSION_LESS 6.1.0)

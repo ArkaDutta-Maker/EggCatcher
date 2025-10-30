@@ -42,6 +42,13 @@ MainWindow::MainWindow(QWidget *parent)
     basketAccel = 20.0f;
     basketMaxVel = 12.0f;
 
+    // -- Load sound files
+    soundCatch.setSource(QUrl(""));
+    soundCatch.setVolume(0.8f);   // 0.0 – 1.0
+
+    soundLose.setSource(QUrl(""));
+    soundLose.setVolume(0.9f);
+
     // --- Timer setup ---
     gameTimer = new QTimer(this);
     connect(gameTimer, &QTimer::timeout, this, &MainWindow::gameTick);
@@ -235,6 +242,7 @@ void MainWindow::updatePhysics(float dt) {
     for (auto &egg : eggs) {
         if (egg.y() >= rows - 1) {
             lives--;
+            soundLose.play();
             continue;
         }
 
@@ -243,6 +251,7 @@ void MainWindow::updatePhysics(float dt) {
         for (auto &bRect : basketRects) {
             if (eggRect.intersects(bRect)) {
                 score++;
+                soundCatch.play();
                 caught = true;
                 break;
             }

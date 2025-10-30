@@ -8,6 +8,7 @@
 #include <QKeyEvent>
 #include <QVector>
 #include <QPointF>
+#include <QSoundEffect>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -56,6 +57,10 @@ private:
 
     // --- Eggs ---
     QVector<QPointF> eggs;
+
+    // --- Sound ---
+    QSoundEffect soundCatch;
+    QSoundEffect soundLose;
 
     // --- Game state ---
     int score;
