@@ -4,6 +4,7 @@
 #include <QRandomGenerator>
 #include <QtMath>
 #include <algorithm>
+#include <QDebug>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow),
@@ -43,11 +44,16 @@ MainWindow::MainWindow(QWidget *parent)
     basketMaxVel = 12.0f;
 
     // -- Load sound files
-    soundCatch.setSource(QUrl::fromLocalFile("sounds/catch.wav"));
+    soundCatch.setSource(QUrl::fromLocalFile("/Users/pavel/Documents/Graphics/EggCatcher/EggCatcher/sfx/catch.wav"));
     soundCatch.setVolume(0.8f);   // 0.0 – 1.0
 
-    soundLose.setSource(QUrl::fromLocalFile("sounds/lose.wav"));
+    soundLose.setSource(QUrl::fromLocalFile("/Users/pavel/Documents/Graphics/EggCatcher/EggCatcher/sfx/lose.wav"));
     soundLose.setVolume(0.9f);
+
+
+
+    qDebug() << "Catch status:" << soundCatch.status();
+    qDebug() << "Lose status:" << soundLose.status();
 
     // --- Timer setup ---
     gameTimer = new QTimer(this);
