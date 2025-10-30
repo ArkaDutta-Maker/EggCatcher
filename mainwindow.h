@@ -54,7 +54,9 @@ private:
     float basketTargetVel = 0.0f;
     float basketAccel = 20.0f;   // acceleration factor for smoothing
     float basketMaxVel = 12.0f;  // max speed in cells/sec
-
+    float lastEdgeSpawnTime;
+    float edgeSpawnCooldown;
+    float globalTime;
     // --- Eggs ---
     QVector<QPointF> eggs;
 
