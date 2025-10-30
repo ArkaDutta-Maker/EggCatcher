@@ -37,6 +37,12 @@ private:
     int grid_size;
     int cols, rows;
     QPixmap background;
+    QVector<int> dropColumns;     // 4 centered columns
+    int currentColumnIndex;        // which column will spawn next
+    float globalSpawnTimer;        // counts time since last spawn
+    float spawnInterval;           // delay between spawns
+    QVector<float> columnTimers;       // timer accumulator per column
+    QVector<float> columnDelays;       // spawn delay per column (seconds)
 
     // --- Basket ---
     QPointF basket;     // subpixel position

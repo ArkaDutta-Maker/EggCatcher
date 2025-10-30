@@ -48,6 +48,22 @@ MainWindow::MainWindow(QWidget *parent)
     fixedDelta = 1.0f / 120.0f;
     accumulator = 0.0f;
     gameOver = false;
+
+    // Select 4 random columns
+    dropColumns.clear();
+    int mid = cols / 2;
+    dropColumns = { mid - 10, mid - 5, mid + 5, mid + 10};
+    std::sort(dropColumns.begin(), dropColumns.end()); // optional, for ordered columns
+
+    columnTimers.resize(dropColumns.size());
+    columnDelays.resize(dropColumns.size());
+    for (int i = 0; i < dropColumns.size(); ++i) {
+        columnTimers[i] = 0.0f;
+        columnDelays[i] = 5.0f + QRandomGenerator::global()->bounded(2.0f); // 2–4 sec delay
+    }
+    currentColumnIndex = 0;
+    globalSpawnTimer = 0.0f;
+    spawnInterval = 1.0f;
 }
 
 MainWindow::~MainWindow() {
@@ -108,6 +124,23 @@ void MainWindow::drawGameOver() {
 void MainWindow::updatePhysics(float dt) {
     if (gameOver) return;
 
+    globalSpawnTimer += dt;
+
+    if (globalSpawnTimer >= spawnInterval) {
+        // spawn egg in the current column
+        int col = dropColumns[currentColumnIndex];
+        eggs.append(QPointF(float(col), 0.0f));
+
+        // move to next column
+        currentColumnIndex = (currentColumnIndex + 1) % dropColumns.size();
+
+        // reset timer
+        globalSpawnTimer = 0.0f;
+
+        // optional: add slight randomness to next spawn interval
+        spawnInterval = 2.0f + QRandomGenerator::global()->bounded(1.0f); // 1–2 sec
+    }
+
     // --- Basket momentum ---
     if (moveLeft && !moveRight)
         basketTargetVel = -basketMaxVel;
@@ -123,7 +156,7 @@ void MainWindow::updatePhysics(float dt) {
     basket.setX(std::clamp((float)basket.x(), 0.0f, float(cols - 1)));
 
     // --- Egg falling ---
-    const float fallSpeed = 3.0f;
+    const float fallSpeed = 6.0f;
     for (auto &egg : eggs)
         egg.setY(egg.y() + fallSpeed * dt);
 
@@ -168,11 +201,31 @@ void MainWindow::updatePhysics(float dt) {
 
     eggs = newEggs;
 
-    // --- Random egg spawn ---
-    if (QRandomGenerator::global()->bounded(100) > 98) {
-        float newX = QRandomGenerator::global()->bounded(float(cols - 1));
-        eggs.append(QPointF(newX, 0.0f));
+    for (int i = 0; i < dropColumns.size(); ++i) {
+        // check if this column already has an egg
+        bool hasEgg = false;
+        for (auto &egg : eggs) {
+            if (int(egg.x()) == dropColumns[i]) {
+                hasEgg = true;
+                break;
+            }
+        }
+
+        // only spawn if no egg in this column
+        if (!hasEgg) {
+            columnTimers[i] += dt;
+            if (columnTimers[i] >= columnDelays[i]) {
+                // spawn egg in this column
+                eggs.append(QPointF(float(dropColumns[i]), 0.0f));
+
+                // reset timer and randomize next delay
+                columnTimers[i] = 0.0f;
+                columnDelays[i] = 3.0f + QRandomGenerator::global()->bounded(2.0f); // 2–4 sec
+            }
+        }
     }
+
+
 }
 
 void MainWindow::drawGame(float alpha) {
