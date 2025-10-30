@@ -11,13 +11,11 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
-    // --- Grid setup ---
     grid_box = 20;
     grid_size = ui->frame->frameSize().width();
     cols = grid_size / grid_box;
     rows = grid_size / grid_box;
 
-    // --- Background grid ---
     QPixmap bg(grid_size, grid_size);
     bg.fill(Qt::black);
     QPainter g(&bg);
@@ -49,21 +47,26 @@ MainWindow::MainWindow(QWidget *parent)
     accumulator = 0.0f;
     gameOver = false;
 
-    // Select 4 random columns
+    // Select 4 predefined drop columns
     dropColumns.clear();
     int mid = cols / 2;
     dropColumns = { mid - 10, mid - 5, mid + 5, mid + 10};
-    std::sort(dropColumns.begin(), dropColumns.end()); // optional, for ordered columns
+    std::sort(dropColumns.begin(), dropColumns.end());
 
     columnTimers.resize(dropColumns.size());
     columnDelays.resize(dropColumns.size());
     for (int i = 0; i < dropColumns.size(); ++i) {
         columnTimers[i] = 0.0f;
-        columnDelays[i] = 5.0f + QRandomGenerator::global()->bounded(2.0f); // 2–4 sec delay
+        columnDelays[i] = 6.0f + QRandomGenerator::global()->bounded(2.0f);
     }
+
     currentColumnIndex = 0;
     globalSpawnTimer = 0.0f;
     spawnInterval = 1.0f;
+    globalTime = 0.f;
+
+    lastEdgeSpawnTime = -100.0f; // initialize far in past
+    edgeSpawnCooldown = 4.0f;    // base 4 sec gap between opposite edge spawns
 }
 
 MainWindow::~MainWindow() {
@@ -121,27 +124,38 @@ void MainWindow::drawGameOver() {
     p.end();
     ui->frame->setPixmap(pix);
 }
+
 void MainWindow::updatePhysics(float dt) {
     if (gameOver) return;
 
+    globalTime += dt;
     globalSpawnTimer += dt;
 
     if (globalSpawnTimer >= spawnInterval) {
-        // spawn egg in the current column
         int col = dropColumns[currentColumnIndex];
-        eggs.append(QPointF(float(col), 0.0f));
+        bool isEdgeCol = (col == dropColumns.front() || col == dropColumns.back());
+        bool canSpawn = true;
 
-        // move to next column
+        // --- Dynamic edge cooldown scaling with score ---
+        float dynamicEdgeCooldown = std::max(1.0f, edgeSpawnCooldown - 0.03f * score);
+
+        if (isEdgeCol && (globalTime - lastEdgeSpawnTime < dynamicEdgeCooldown)) {
+            canSpawn = false; // skip this turn for fairness
+        }
+
+        if (canSpawn) {
+            eggs.append(QPointF(float(col), 0.0f));
+
+            if (isEdgeCol)
+                lastEdgeSpawnTime = globalTime; // record last edge spawn time
+        }
+
         currentColumnIndex = (currentColumnIndex + 1) % dropColumns.size();
-
-        // reset timer
         globalSpawnTimer = 0.0f;
-
-        // optional: add slight randomness to next spawn interval
-        spawnInterval = 2.0f + QRandomGenerator::global()->bounded(1.0f); // 1–2 sec
+        spawnInterval = 2.0f + QRandomGenerator::global()->bounded(1.0f);
     }
 
-    // --- Basket momentum ---
+    // --- Basket movement ---
     if (moveLeft && !moveRight)
         basketTargetVel = -basketMaxVel;
     else if (moveRight && !moveLeft)
@@ -151,12 +165,12 @@ void MainWindow::updatePhysics(float dt) {
 
     float blend = 1.0f - qExp(-basketAccel * dt);
     basketXVelocity += (basketTargetVel - basketXVelocity) * blend;
-
     basket.setX(basket.x() + basketXVelocity * dt);
     basket.setX(std::clamp((float)basket.x(), 0.0f, float(cols - 1)));
 
-    // --- Egg falling ---
-    const float fallSpeed = 6.0f;
+    // --- Egg falling speed (scales with score) ---
+    float fallSpeed = 3.0f + 0.15f * score;
+    fallSpeed = std::min(fallSpeed, 25.0f); // cap at 25
     for (auto &egg : eggs)
         egg.setY(egg.y() + fallSpeed * dt);
 
@@ -166,17 +180,16 @@ void MainWindow::updatePhysics(float dt) {
     int by = qRound(basket.y());
 
     QVector<QPoint> basketCells = {
-        {bx-2, by}, {bx-1, by}, {bx, by}, {bx+1, by}, {bx+2, by}, // top row
-        {bx-1, by+1}, {bx, by+1}, {bx+1, by+1},                   // middle row
-        {bx, by+2}                                                 // bottom tip
+        {bx-2, by}, {bx-1, by}, {bx, by}, {bx+1, by}, {bx+2, by},
+        {bx-1, by+1}, {bx, by+1}, {bx+1, by+1},
+        {bx, by+2}
     };
 
-    // create basket rectangles (logical grid units)
     QVector<QRectF> basketRects;
     for (auto &cell : basketCells) {
         int cx = std::clamp(cell.x(), 0, cols-1);
         int cy = std::clamp(cell.y(), 0, rows-1);
-        basketRects.push_back(QRectF(cx - 0.1f, cy - 0.1f, 1.2f, 1.2f)); // small margin for safety
+        basketRects.push_back(QRectF(cx - 0.1f, cy - 0.1f, 1.2f, 1.2f));
     }
 
     for (auto &egg : eggs) {
@@ -201,8 +214,8 @@ void MainWindow::updatePhysics(float dt) {
 
     eggs = newEggs;
 
+    // --- Per-column delayed spawns ---
     for (int i = 0; i < dropColumns.size(); ++i) {
-        // check if this column already has an egg
         bool hasEgg = false;
         for (auto &egg : eggs) {
             if (int(egg.x()) == dropColumns[i]) {
@@ -211,21 +224,15 @@ void MainWindow::updatePhysics(float dt) {
             }
         }
 
-        // only spawn if no egg in this column
         if (!hasEgg) {
             columnTimers[i] += dt;
             if (columnTimers[i] >= columnDelays[i]) {
-                // spawn egg in this column
                 eggs.append(QPointF(float(dropColumns[i]), 0.0f));
-
-                // reset timer and randomize next delay
                 columnTimers[i] = 0.0f;
-                columnDelays[i] = 3.0f + QRandomGenerator::global()->bounded(2.0f); // 2–4 sec
+                columnDelays[i] = 3.0f + QRandomGenerator::global()->bounded(2.0f);
             }
         }
     }
-
-
 }
 
 void MainWindow::drawGame(float alpha) {
@@ -254,8 +261,10 @@ void MainWindow::drawGame(float alpha) {
         painter.fillRect(rect, Qt::blue);
     }
 
-    // --- Eggs render ---
-    const float fallSpeed = 6.0f;
+    // --- Eggs render (fall speed interpolated with score scaling) ---
+    float fallSpeed = 3.0f + 0.15f * score;
+    fallSpeed = std::min(fallSpeed, 25.0f);
+
     for (auto &egg : eggs) {
         float eggRenderY = egg.y() + fallSpeed * alpha * fixedDelta;
         QRectF eggRect(
