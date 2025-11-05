@@ -558,7 +558,7 @@ void MainWindow::drawGame(float alpha)
 
         float eggRenderY = egg.y() + fallSpeed * alpha * fixedDelta;
 
-        // ✅ IMPORTANT:
+        // IMPORTANT:
         // Pass grid coords (not pixel coords) to midpoint algorithm
         int cx = qRound(egg.x());        // GRID coordinate
         int cy = qRound(eggRenderY);     // GRID coordinate
