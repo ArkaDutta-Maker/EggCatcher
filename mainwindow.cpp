@@ -1,229 +1,120 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
+
 #include <QPainter>
 #include <QRandomGenerator>
 #include <QtMath>
 #include <algorithm>
+#include <QThread>
 #include <QDebug>
-
-/* ============================================================
-    HELPER — Draw egg (semi + ellipse)
-============================================================ */
-static void drawEggShape(QPainter &p, int cx, int cy, int box)
-{
-    p.setBrush(Qt::yellow);
-    p.setPen(Qt::NoPen);
-
-    auto plot = [&](int gx, int gy){
-        p.fillRect(gx * box, gy * box, box, box, Qt::yellow);
-    };
-
-    /* ======================================================
-       SEMICIRCLE BOTTOM
-       (midpoint circle algorithm)
-    ====================================================== */
-    int r = box;
-    int x = 0;
-    int y = r;
-    int d = 1 - r;
-
-    while (x <= y)
-    {
-        // only y >= 0 → lower half
-        int px[4] = { x,  y, -x, -y };
-        int py[4] = { y,  x,  y,  x };
-
-        for (int i = 0; i < 4; i++)
-        {
-            int gx = cx + px[i];
-            int gy = cy + py[i];
-            if (gy >= cy)   // ensure lower half only
-                plot(gx, gy);
-        }
-
-        x++;
-        if (d < 0)  d += 2*x + 1;
-        else { y--; d += 2*(x - y) + 1; }
-    }
-
-    /* ======================================================
-       ELLIPSE TOP
-       (midpoint ellipse algorithm)
-    ====================================================== */
-    int rx = box;           // horizontal
-    int ry = box * 1.5;     // vertical
-    int rx2 = rx * rx;
-    int ry2 = ry * ry;
-
-    int ex = 0;
-    int ey = ry;
-
-    float d1 = ry2 - rx2 * ry + (0.25f * rx2);
-    int dx = 2 * ry2 * ex;
-    int dy = 2 * rx2 * ey;
-
-    // Region 1
-    while (dx < dy)
-    {
-        int gx0 = cx + ex;
-        int gx1 = cx - ex;
-        int gy  = cy - ey;
-
-        if (gy <= cy) {   // upper half
-            plot(gx0, gy);
-            plot(gx1, gy);
-        }
-
-        if (d1 < 0) {
-            ex++;
-            dx += 2 * ry2;
-            d1 += dx + ry2;
-        } else {
-            ex++;
-            ey--;
-            dx += 2 * ry2;
-            dy -= 2 * rx2;
-            d1 += dx - dy + ry2;
-        }
-    }
-
-    // Region 2
-    float d2 =
-        (ry2) * (ex + 0.5f) * (ex + 0.5f) +
-        (rx2) * (ey - 1) * (ey - 1) -
-        (rx2 * ry2);
-
-    while (ey >= 0)
-    {
-        int gx0 = cx + ex;
-        int gx1 = cx - ex;
-        int gy  = cy - ey;
-
-        if (gy <= cy) { // upper half only
-            plot(gx0, gy);
-            plot(gx1, gy);
-        }
-
-        if (d2 > 0) {
-            ey--;
-            dy -= 2 * rx2;
-            d2 += rx2 - dy;
-        } else {
-            ey--;
-            ex++;
-            dx += 2 * ry2;
-            dy -= 2 * rx2;
-            d2 += dx - dy + rx2;
-        }
-    }
-}
-
-
+#include <QPainterPath>
+#include <QKeyEvent>
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), ui(new Ui::MainWindow),
-    moveLeft(false), moveRight(false)
+    : QMainWindow(parent),
+    ui(new Ui::MainWindow),
+    gameTimer(nullptr),
+    highScore(0),
+    grid_box(6),
+    grid_size(600),
+    cols(0),
+    rows(0),
+    globalTime(0.0f),
+    globalSpawnTimer(0.0f),
+    spawnInterval(1.0f),
+    lastEdgeSpawnTime(-100.0f),
+    edgeSpawnCooldown(4.0f),
+    currentColumnIndex(0),
+    basket(0, 0),
+    prevBasketX(0.0f),
+    basketXVelocity(0.0f),
+    basketTargetVel(0.0f),
+    basketAccel(25.0f),
+    basketMaxVel(50.0f),
+    moveLeft(false),
+    moveRight(false),
+    fixedDelta(1.0f / 120.0f),
+    accumulator(0.0f),
+    gameOver(false),
+    gameRunning(false),
+    score(0),
+    lives(3),
+    flashAlpha(0.0f),
+    flashFadeSpeed(2.5f)
 {
     ui->setupUi(this);
     setFocusPolicy(Qt::StrongFocus);
 
-    /* ------------------------------------------------------------
-        GRID
-    ------------------------------------------------------------ */
-    grid_box = 5;
-    grid_size = ui->frame->frameSize().width();
-    cols = grid_size / grid_box;
-    rows = grid_size / grid_box;
+    // Size grid from frame widget if available
+    if (ui->frame) {
+        grid_size = ui->frame->frameSize().width();
+        if (grid_size <= 0)
+            grid_size = 600;
+    }
 
-    /* ------------------ background grid --------------------- */
-    QPixmap bg(grid_size, grid_size);
-    bg.fill(Qt::black);
+    cols = qMax(40, grid_size / grid_box);
+    rows = qMax(30, grid_size / grid_box);
+
+    // background (simple green field)
+    background = QPixmap(grid_size, grid_size);
+    background.fill(QColor(48, 120, 48)); // nicer green
     {
-        QPainter g(&bg);
-        g.setPen(QPen(Qt::darkGray, 1));
-        for (int i = 0; i <= cols; i++)
+        QPainter g(&background);
+        g.setPen(QPen(QColor(25, 100, 25, 80), 1));
+        for (int i = 0; i <= cols; ++i)
             g.drawLine(i * grid_box, 0, i * grid_box, grid_size);
-        for (int j = 0; j <= rows; j++)
+        for (int j = 0; j <= rows; ++j)
             g.drawLine(0, j * grid_box, grid_size, j * grid_box);
     }
-    background = bg;
     ui->frame->setPixmap(background);
 
-    /* ------------------------------------------------------------
-        GAME VARS
-    ------------------------------------------------------------ */
+    // Game defaults
     score = 0;
     lives = 3;
-    basket = QPointF(cols / 2.0f, rows - 3);
+    basket = QPointF(cols / 2.0f, rows - 3.0f);
+    prevBasketX = basket.x();
 
-    basketXVelocity = 0.0f;
-    basketTargetVel = 0.0f;
-    basketAccel     = 20.0f;
-    basketMaxVel    = 12.0f;
-
-    /* ------------------------------------------------------------
-        SOUNDS
-    ------------------------------------------------------------ */
-    soundCatch.setSource(QUrl::fromLocalFile("/Users/pavel/Documents/Graphics/EggCatcher/EggCatcher/sfx/catch.wav"));
+    // Sounds
+    soundCatch.setSource(QUrl::fromLocalFile("C:/Projects/EggCatcher/sfx/catch.wav"));
     soundCatch.setVolume(0.8f);
-
-    soundLose.setSource(QUrl::fromLocalFile("/Users/pavel/Documents/Graphics/EggCatcher/EggCatcher/sfx/lose.wav"));
+    soundLose.setSource(QUrl::fromLocalFile("C:/Projects/EggCatcher/sfx/lose.wav"));
     soundLose.setVolume(0.9f);
 
-    qDebug() << "Catch status:" << soundCatch.status();
-    qDebug() << "Lose status:" << soundLose.status();
-
-    /* ------------------------------------------------------------
-        TIMER
-    ------------------------------------------------------------ */
-    gameTimer = new QTimer(this);
-    connect(gameTimer, &QTimer::timeout, this, &MainWindow::gameTick);
-    gameTimer->start(16);
-    frameClock.start();
-    fixedDelta = 1.0f / 120.0f;
-    accumulator = 0.0f;
-    gameOver = false;
-
-
-    /* ------------------------------------------------------------
-        DROP COLUMNS (MORE SPACED)
-    ------------------------------------------------------------ */
+    // Drop columns
     dropColumns.clear();
     int mid = cols / 2;
-
-    dropColumns = { mid - 12, mid - 6, mid + 6, mid + 12 };
+    dropColumns = {mid - 24, mid - 6, mid + 6, mid + 24};
     std::sort(dropColumns.begin(), dropColumns.end());
 
     columnTimers.resize(dropColumns.size());
     columnDelays.resize(dropColumns.size());
     for (int i = 0; i < dropColumns.size(); ++i) {
         columnTimers[i] = 0.0f;
-        columnDelays[i] = 6.0f + QRandomGenerator::global()->bounded(2.0f);
+        columnDelays[i] = 3.0f + QRandomGenerator::global()->bounded(2.0f);
     }
 
-    currentColumnIndex = 0;
-    globalSpawnTimer   = 0.0f;
-    spawnInterval      = 1.0f;
-    globalTime         = 0.0f;
+    // Timer
+    gameTimer = new QTimer(this);
+    gameTimer->setTimerType(Qt::PreciseTimer);
+    connect(gameTimer, &QTimer::timeout, this, &MainWindow::gameTick);
+    gameTimer->start(1000 / 60);  // ≈ 16.67 ms per frame
 
-    lastEdgeSpawnTime  = -100.0f;
-    edgeSpawnCooldown  = 4.0f;
+    frameClock.start();
+
+    // start paused
+    gameRunning = false;
+    gameOver = false;
 }
-
 
 MainWindow::~MainWindow()
 {
     delete ui;
 }
 
-
-
-/* ============================================================
-    INPUT
-============================================================ */
 void MainWindow::keyPressEvent(QKeyEvent *event)
 {
-    if (event->isAutoRepeat()) return;
+    if (event->isAutoRepeat())
+        return;
 
     if (gameOver && event->key() == Qt::Key_R) {
         resetGame();
@@ -235,59 +126,55 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         return;
     }
 
-    if (gameOver) return;
-    if (!gameRunning) return;
+    if (gameOver || !gameRunning)
+        return;
 
-    if (event->key() == Qt::Key_A)
+    if (event->key() == Qt::Key_A || event->key() == Qt::Key_Left)
         moveLeft = true;
-    else if (event->key() == Qt::Key_D)
+    else if (event->key() == Qt::Key_D || event->key() == Qt::Key_Right)
         moveRight = true;
 }
 
 void MainWindow::keyReleaseEvent(QKeyEvent *event)
 {
-    if (event->isAutoRepeat()) return;
-    if (gameOver) return;
-    if (!gameRunning) return;
+    if (event->isAutoRepeat())
+        return;
+    if (gameOver || !gameRunning)
+        return;
 
-    if (event->key() == Qt::Key_A)
+    if (event->key() == Qt::Key_A || event->key() == Qt::Key_Left)
         moveLeft = false;
-    else if (event->key() == Qt::Key_D)
+    else if (event->key() == Qt::Key_D || event->key() == Qt::Key_Right)
         moveRight = false;
 }
 
-
-
-/* ============================================================
-    RESET
-============================================================ */
 void MainWindow::resetGame()
 {
     score = 0;
     lives = 3;
     eggs.clear();
-    basket = QPointF(cols / 2.0f, rows - 3);
+    basket = QPointF(cols / 2.0f, rows - 3.0f);
+    prevBasketX = basket.x();
     basketXVelocity = 0.0f;
     basketTargetVel = 0.0f;
     gameOver = false;
+    moveRight = false;
+    moveLeft = false;
     accumulator = 0.0f;
+    flashColor = QColor();
     frameClock.restart();
     gameRunning = true;
     gameTimer->start();
 }
 
-
-
-/* ============================================================
-    START SCREEN
-============================================================ */
 void MainWindow::drawStartScreen()
 {
     QPixmap pix = background;
     QPainter p(&pix);
+    p.setRenderHint(QPainter::Antialiasing, true);
 
     p.setPen(Qt::white);
-    p.setFont(QFont("Arial", 20, QFont::Bold));
+    p.setFont(QFont("Arial", 24, QFont::Bold));
     p.drawText(pix.rect(), Qt::AlignCenter,
                "EGG CATCHER\n\nPress ENTER to Start");
 
@@ -295,18 +182,14 @@ void MainWindow::drawStartScreen()
     ui->frame->setPixmap(pix);
 }
 
-
-
-/* ============================================================
-    GAME OVER
-============================================================ */
 void MainWindow::drawGameOver()
 {
     QPixmap pix = background;
     QPainter p(&pix);
+    p.setRenderHint(QPainter::Antialiasing, true);
 
     p.setPen(Qt::red);
-    p.setFont(QFont("Arial", 24, QFont::Bold));
+    p.setFont(QFont("Arial", 28, QFont::Bold));
     p.drawText(pix.rect(), Qt::AlignCenter,
                "GAME OVER\nPress R to Restart");
 
@@ -314,80 +197,100 @@ void MainWindow::drawGameOver()
     ui->frame->setPixmap(pix);
 }
 
-
-
-/* ============================================================
-    MAIN TICK
-============================================================ */
 void MainWindow::gameTick()
 {
+
     if (gameOver) {
         drawGameOver();
         return;
     }
-
     if (!gameRunning) {
         drawStartScreen();
         return;
     }
 
+    // Elapsed real time
     float dt = frameClock.restart() / 1000.0f;
+    dt = qBound(0.001f, dt, 0.05f);   // clamp: min 1ms, max 50ms
     accumulator += dt;
 
-    while (accumulator >= fixedDelta) {
-        updatePhysics(fixedDelta);
-        accumulator -= fixedDelta;
+    // Run physics in fixed steps
+    const float fixedStep = fixedDelta;  // 1/120 s
+    while (accumulator >= fixedStep) {
+        updatePhysics(fixedStep);
+        accumulator -= fixedStep;
     }
 
-    float alpha = accumulator / fixedDelta;
+    float alpha = accumulator / fixedStep;
+
     drawGame(alpha);
 
-    if (lives <= 0) {
-        gameOver = true;
-        drawGameOver();
-        gameTimer->stop();
+    const int targetFrameMS = 16; // ~60fps
+    int elapsed = frameClock.elapsed();
+    if (elapsed < targetFrameMS)
+        QThread::msleep(targetFrameMS - elapsed);
+
+    static int frameCount = 0;
+    static float fpsTimer = 0;
+    frameCount++;
+    fpsTimer += dt;
+    if (fpsTimer >= 1.0f) {
+        qDebug() << "FPS:" << frameCount;
+        frameCount = 0;
+        fpsTimer = 0;
     }
+
 }
 
 
-
-/* ============================================================
-    PHYSICS
-============================================================ */
 void MainWindow::updatePhysics(float dt)
 {
-    if (gameOver) return;
+    if (gameOver)
+        return;
 
-    globalTime      += dt;
+    globalTime += dt;
     globalSpawnTimer += dt;
 
-
-    /* ------------------- SPAWNING ------------------- */
+    // -------------------- EGG SPAWN --------------------
     if (globalSpawnTimer >= spawnInterval) {
-
         int col = dropColumns[currentColumnIndex];
         bool isEdgeCol = (col == dropColumns.front() || col == dropColumns.back());
-        bool canSpawn  = true;
+        bool canSpawn = true;
 
-        float dynamicEdgeCooldown =
-            std::max(1.0f, edgeSpawnCooldown - 0.03f * score);
-
+        float dynamicEdgeCooldown = qMax(0.6f, edgeSpawnCooldown - 0.03f * score);
         if (isEdgeCol && (globalTime - lastEdgeSpawnTime < dynamicEdgeCooldown))
             canSpawn = false;
 
         if (canSpawn) {
-            eggs.append(QPointF(float(col), 0.0f));
+            Egg e;
+            e.pos = QPointF(float(col), 0.0f);
+            e.yVelocity = 0.0f;
+            e.state = "falling";
+
+            // ------------------ NEW TYPE SYSTEM ------------------
+            int r = QRandomGenerator::global()->bounded(100);
+            if (r < 75) {
+                e.type = "normal";
+                e.color = QColor(Qt::white);
+            } else if (r < 95) {
+                e.type = "bad";
+                e.color = QColor(200, 50, 50); // red tint
+            } else {
+                e.type = "life";
+                e.color = QColor(255, 105, 180); // pink/green
+            }
+
+            eggs.append(e);
             if (isEdgeCol)
                 lastEdgeSpawnTime = globalTime;
         }
 
         currentColumnIndex = (currentColumnIndex + 1) % dropColumns.size();
-        globalSpawnTimer   = 0.0f;
-        spawnInterval      = 2.0f + QRandomGenerator::global()->bounded(1.0f);
+        globalSpawnTimer = 0.0f;
+        spawnInterval = 0.8f + QRandomGenerator::global()->bounded(0.6f);
     }
 
-
-    /* ------------------- BASKET MOVEMENT ------------------- */
+    // -------------------- BASKET MOVEMENT --------------------
     if (moveLeft && !moveRight)
         basketTargetVel = -basketMaxVel;
     else if (moveRight && !moveLeft)
@@ -396,147 +299,281 @@ void MainWindow::updatePhysics(float dt)
         basketTargetVel = 0.0f;
 
     float blend = 1.0f - qExp(-basketAccel * dt);
-    basketXVelocity += (basketTargetVel - basketXVelocity) * blend;
+    basketXVelocity += (basketTargetVel - basketXVelocity) * qMin(1.0f, dt * basketAccel);
 
+    // **MOVE basket position**
     basket.setX(basket.x() + basketXVelocity * dt);
     basket.setX(std::clamp((float)basket.x(), 0.0f, float(cols - 1)));
+    prevBasketX = basket.x();
+
+    // -------------------- EGG PHYSICS --------------------
+    float baseGravity = 18.0f + score* 0.1f;
+    float maxFallSpeed = 40.0f;
+
+    spawnInterval = qMax(0.3f, 0.8f - score * 0.02f);
 
 
-    /* ------------------- EGGS FALL ------------------- */
-    float fallSpeed = 3.0f + 0.15f * score;
-    fallSpeed = std::min(fallSpeed, 25.0f);
-
-    for (auto &egg : eggs)
-        egg.setY(egg.y() + fallSpeed * dt);
-
-
-    /* ------------------- COLLISION CHECK ------------------- */
-    QVector<QPointF> newEggs;
-    int bx = qRound(basket.x());
-    int by = qRound(basket.y());
-
-    // enlarged basket mask
-    QVector<QPoint> basketCells = {
-        {bx-3, by}, {bx-2, by}, {bx-1, by}, {bx, by}, {bx+1, by}, {bx+2, by}, {bx+3, by},
-        {bx-2, by+1}, {bx-1, by+1}, {bx, by+1}, {bx+1, by+1}, {bx+2, by+1},
-        {bx-1, by+2}, {bx, by+2}, {bx+1, by+2},
-        {bx, by+3}
-    };
-
-    QVector<QRectF> basketRects;
-    for (auto &cell : basketCells) {
-        int cx = std::clamp(cell.x(), 0, cols-1);
-        int cy = std::clamp(cell.y(), 0, rows-1);
-        basketRects.push_back(QRectF(cx - 0.1f, cy - 0.1f, 1.2f, 1.2f));
-    }
-
+    QVector<Egg> survivors;
+    bool caughtAny = false, lostAny = false;
     for (auto &egg : eggs) {
-        if (egg.y() >= rows - 1) {
-            lives--;
-            soundLose.play();
-            continue;
+        egg.prevY = egg.pos.y();
+        float gravity = baseGravity;
+        if (egg.type == "life") gravity *= 0.5f; // slower fall
+        if (egg.type == "bad") gravity *= 1.2f;  // slightly faster
+
+        if (egg.state == "falling") {
+            egg.yVelocity += gravity * dt;
+            egg.yVelocity = qMin(egg.yVelocity, maxFallSpeed);
+            egg.pos.setY(egg.pos.y() + egg.yVelocity * dt);
+
+            // -------------------- FIXED COLLISION --------------------
+            // -------------------- FIXED COLLISION (Faster, Early Catch) --------------------
+            int basketWidth = 16;
+            int basketHeight = 6;
+
+            // Slightly enlarge detection area vertically for earlier catch
+            QRectF basketRect(
+                basket.x() - basketWidth / 2.0f,
+                basket.y() - 1.5f,     // lifted upward to catch earlier
+                basketWidth,
+                basketHeight + 1.5f    // increased height slightly
+                );
+
+            QRectF eggRect(egg.pos.x(), egg.pos.y(), 1.0f, 1.0f);
+
+            if (eggRect.intersects(basketRect)) {
+                egg.state = "caught";
+                egg.animTimer = 0;
+
+                if (egg.type == "bad") {
+                    lives = std::max(0, lives - 1);
+                    lostAny = true;
+                    flashColor = QColor(255, 0, 0);  // pure red
+                    flashAlpha = 0.0f;
+                    flashTimer = 0.0f;
+                }
+                else if (egg.type == "life") {
+                    lives = std::min(5, lives + 1);
+                    flashColor = QColor(0, 255, 0);  // green
+                    flashAlpha = 0.0f;
+                    flashTimer = 0.0f;
+                }
+                else {
+                    score++;
+                }
+
+                caughtAny = true;
+            }
+            else if (egg.pos.y() >= rows - 1) {
+                egg.state = "splat";
+                egg.animTimer = 0;
+                if(egg.type != "bad")
+                    lostAny = true;
+            }
+            survivors.push_back(egg);
         }
+        else if (egg.state == "caught") {
+            egg.animTimer += dt;
+            egg.scale = 1.0f - egg.animTimer * 3.0f;
+            egg.alpha = 1.0f - egg.animTimer * 2.0f;
+            if (egg.animTimer >= 0.5f)
+                continue;
+            survivors.push_back(egg);
+        }
+        else if (egg.state == "splat" && egg.animTimer < 1) { // spawn once
+            int numParticles = 12;
+            int scale = 1000; // fixed-point scaling
+            for (int i = 0; i < numParticles; ++i) {
+                int angleDeg = QRandomGenerator::global()->bounded(0, 360);
+                double rad = angleDeg * M_PI / 180.0;
 
-        QRectF eggRect(egg.x(), egg.y(), 1.0f, 1.0f);
-        bool caught = false;
+                int speed = QRandomGenerator::global()->bounded(500, 1500); // scaled by 1000
 
-        for (auto &bRect : basketRects) {
-            if (eggRect.intersects(bRect)) {
-                score++;
-                soundCatch.play();
-                caught = true;
-                break;
+                Particle p;
+                p.pos = QPoint(int(egg.pos.x() * scale), int(egg.pos.y() * scale));
+                p.velocity = QPoint(int(cos(rad) * speed), int(sin(rad) * speed));
+                p.lifetime = QRandomGenerator::global()->bounded(30, 60); // ticks
+                p.alpha = 255;
+                p.color = egg.color;
+                particles.append(p);
             }
         }
 
-        if (!caught)
-            newEggs.push_back(egg);
     }
 
-    eggs = newEggs;
+    eggs = survivors;
+    if (caughtAny) score++;
+    if (lostAny) lives--;
+    if (score > highScore) highScore = score;  // <--- update high score
+    if(lives <= 0) gameOver = true;
 
 
-    /* ------------------- PER COLUMN SPAWN ------------------- */
-    for (int i = 0; i < dropColumns.size(); ++i) {
+    // -------- FLASH ANIMATION UPDATE --------
+    if (flashColor.isValid()) {
+        flashTimer += dt;
+        float fadeInDur = 0.2f;
+        float fadeOutDur = 0.5f;
 
-        bool hasEgg = false;
-        for (auto &egg : eggs)
-            if (int(egg.x()) == dropColumns[i])
-                hasEgg = true;
-
-        if (!hasEgg) {
-            columnTimers[i] += dt;
-            if (columnTimers[i] >= columnDelays[i]) {
-                eggs.append(QPointF(float(dropColumns[i]), 0.0f));
-                columnTimers[i] = 0.0f;
-                columnDelays[i] = 3.0f + QRandomGenerator::global()->bounded(2.0f);
-            }
+        if (flashTimer < fadeInDur)
+            flashAlpha = flashTimer / fadeInDur;
+        else if (flashTimer < fadeInDur + fadeOutDur)
+            flashAlpha = 1.0f - (flashTimer - fadeInDur) / fadeOutDur;
+        else {
+            flashColor = QColor();
+            flashAlpha = 0.0f;
         }
     }
+    QVector<Particle> aliveParticles;
+    int scale = 1000;
+    for (auto &p : particles) {
+        p.pos += p.velocity / 60;   // divide by FPS for movement
+        p.lifetime--;
+        p.alpha = std::max(0, (p.lifetime * 255) / 60); // fade out
+        if (p.lifetime > 0)
+            aliveParticles.push_back(p);
+    }
+    particles = aliveParticles;
+
 }
 
 
-
 /* ============================================================
-    DRAW
+    EGG DRAWING — Semicircle (bottom) + Ellipse (top)
 ============================================================ */
+
+void MainWindow::drawEggShape(QPainter &p, const Egg &egg, float cellSize)
+{
+    p.setRenderHint(QPainter::Antialiasing, true);
+    QPointF center((egg.pos.x() + 0.5f) * cellSize, (egg.pos.y() + 0.5f) * cellSize);
+
+    float baseW = cellSize * 1.5f* 1.5f;
+    float baseH = cellSize * 1.5f* 2.0f;
+    float w = baseW * egg.scale;
+    float h = baseH * egg.scale;
+
+    QColor fillColor = egg.color;
+    QColor outlineColor = Qt::yellow;
+    fillColor.setAlphaF(egg.alpha);
+    outlineColor.setAlphaF(egg.alpha);
+
+    if (egg.type == "life") {
+        QRadialGradient grad(center, w * 0.6f);
+        grad.setColorAt(0, QColor(255, 182, 193, 180));
+        grad.setColorAt(1, QColor(255, 105, 180, 40));
+        p.setBrush(grad);
+    } else {
+        p.setBrush(fillColor);
+    }
+
+    fillColor.setAlphaF(egg.alpha);
+    outlineColor.setAlphaF(egg.alpha);
+
+    if (egg.state == "splat") {
+        // Flattened splat look
+        QRectF splatRect(center.x() - w * 0.5f, center.y() - h * 0.25f, w, h * 0.4f);
+        p.setBrush(fillColor);
+        p.setPen(QPen(outlineColor, 2.0));
+        p.drawEllipse(splatRect);
+    } else {
+        QRectF eggRect(center.x() - w * 0.5f, center.y() - h * 0.45f, w, h);
+        p.setBrush(fillColor);
+        p.setPen(QPen(outlineColor, 2.0));
+        p.drawEllipse(eggRect);
+    }
+}
+
 void MainWindow::drawGame(float alpha)
 {
+
+
     QPixmap framePix = background;
     QPainter painter(&framePix);
+    painter.setRenderHint(QPainter::Antialiasing, true);
 
-    auto snap = [&](float c){ return qRound(c) * grid_box; };
+    float basketRenderX = prevBasketX + (basket.x() - prevBasketX) * alpha;
+    float basketRenderY = basket.y();
 
+    int basketWidthCells = 16;
+    int basketHeightCells = 6;
 
-    /* ------------------- BASKET ------------------- */
-    float basketRenderX = basket.x() + basketXVelocity * alpha * fixedDelta;
-    int bx = qRound(basketRenderX);
-    int by = qRound(basket.y());
-
-    QVector<QPoint> basketCells = {
-        {bx-3, by}, {bx-2, by}, {bx-1, by}, {bx, by}, {bx+1, by}, {bx+2, by}, {bx+3, by},
-        {bx-2, by+1}, {bx-1, by+1}, {bx, by+1}, {bx+1, by+1}, {bx+2, by+1},
-        {bx-1, by+2}, {bx, by+2}, {bx+1, by+2},
-        {bx, by+3}
-    };
-
-    painter.setBrush(Qt::blue);
-    painter.setPen(Qt::NoPen);
-
-    for (auto &cell : basketCells) {
-        int cx = std::clamp(cell.x(), 0, cols-1);
-        int cy = std::clamp(cell.y(), 0, rows-1);
-
-        QRectF r(cx * grid_box, cy * grid_box, grid_box, grid_box);
-        painter.fillRect(r, Qt::blue);
+    QColor basketFill(205, 133, 63);
+    QColor basketOutline(120, 60, 20);
+    // -------- FLASH RENDERING --------
+    if (flashColor.isValid() && flashAlpha > 0.0f) {
+        QColor overlay = flashColor;
+        overlay.setAlphaF(flashAlpha * 0.5f);  // subtle transparency
+        painter.fillRect(framePix.rect(), overlay);
     }
 
-
-    /* ------------------- EGGS ------------------- */
-    float fallSpeed = 3.0f + 0.15f * score;
-    fallSpeed = std::min(fallSpeed, 25.0f);
-
-    painter.setBrush(Qt::yellow);
+    painter.setBrush(basketFill);
     painter.setPen(Qt::NoPen);
 
+    for (int y = 0; y < basketHeightCells; ++y) {
+        float rowY = basketRenderY + y;
+        int taper = std::min(y / 1, basketWidthCells / 6);
+        int startX = -basketWidthCells / 2 + taper;
+        int endX = basketWidthCells / 2 - taper;
+        for (int x = startX; x <= endX; ++x) {
+            float cx = basketRenderX + x;
+            float px = cx * grid_box;
+            float py = rowY * grid_box;
+            painter.fillRect(px, py, grid_box, grid_box, basketFill);
+        }
+    }
+
+    painter.setBrush(Qt::NoBrush);
+    QPen rimPen(basketOutline);
+    rimPen.setWidthF(4.0);
+    rimPen.setCapStyle(Qt::RoundCap);
+    rimPen.setJoinStyle(Qt::RoundJoin);
+    painter.setPen(rimPen);
+
+    QPainterPath rimPath;
+    QPointF leftPoint((basketRenderX - basketWidthCells / 2.0f) * grid_box, basketRenderY * grid_box);
+    QPointF rightPoint((basketRenderX + basketWidthCells / 2.0f) * grid_box, basketRenderY * grid_box);
+    QPointF control(basketRenderX * grid_box, (basketRenderY - basketHeightCells * 0.5f) * grid_box);
+    rimPath.moveTo(leftPoint);
+    rimPath.quadTo(control, rightPoint);
+    painter.drawPath(rimPath);
+
+    int trailLength = 6;
+    for (int i = 1; i <= trailLength; ++i) {
+        int fade = qMax(10, 120 - i * 18);
+        QColor trailColor(160, 82, 45, fade);
+        float trailX = basketRenderX - basketXVelocity * (i * 0.02f);
+        painter.fillRect((trailX - basketWidthCells / 2.0f) * grid_box,
+                         basketRenderY * grid_box,
+                         basketWidthCells * grid_box,
+                         basketHeightCells * grid_box,
+                         trailColor);
+    }
+
+    // Draw Eggs
     for (auto &egg : eggs) {
+        Egg renderEgg = egg;
+        renderEgg.pos.setY(egg.prevY + (egg.pos.y() - egg.prevY) * alpha);
+        drawEggShape(painter, renderEgg, (float)grid_box);
+    }
 
-        float eggRenderY = egg.y() + fallSpeed * alpha * fixedDelta;
+    // HUD
+    painter.setPen(Qt::white);
+    painter.setFont(QFont("Arial", 20, QFont::Bold));
+    painter.drawText(20, 40, QString("Score: %1").arg(score));
+    painter.drawText(framePix.width() - 150, 40, QString("Lives: %1").arg(lives));
+    painter.drawText(20, 70, QString("High Score: %1").arg(highScore)); // <--- add this
 
-        // ✅ IMPORTANT:
-        // Pass grid coords (not pixel coords) to midpoint algorithm
-        int cx = qRound(egg.x());        // GRID coordinate
-        int cy = qRound(eggRenderY);     // GRID coordinate
 
-        drawEggShape(painter, cx, cy, grid_box);
+    painter.setPen(Qt::NoPen);
+    for (auto &p : particles) {
+        QColor c = p.color;
+        c.setAlpha(p.alpha);
+        painter.setBrush(c);
+        painter.setPen(Qt::NoPen);
+        int size = grid_box / 3;
+        painter.drawEllipse(QPointF(p.pos.x() / 1000.0, p.pos.y() / 1000.0) * grid_box, size, size);
     }
 
 
-    /* ------------------- HUD ------------------- */
-    painter.setPen(Qt::white);
-    painter.setFont(QFont("Arial", 10));
-    painter.drawText(10, 20,
-                     QString("Score: %1   Lives: %2").arg(score).arg(lives));
 
     painter.end();
     ui->frame->setPixmap(framePix);
