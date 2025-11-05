@@ -11,25 +11,26 @@
 ============================================================ */
 static void drawEggShape(QPainter &p, int cx, int cy, int box)
 {
-    p.setBrush(Qt::yellow);
+    p.setBrush(Qt::white);
     p.setPen(Qt::NoPen);
 
     auto plot = [&](int gx, int gy){
-        p.fillRect(gx * box, gy * box, box, box, Qt::yellow);
+        p.fillRect(gx * box, gy * box, box, box, Qt::white);
     };
 
     /* ======================================================
        SEMICIRCLE BOTTOM
-       (midpoint circle algorithm)
+       (midpoint circle)
     ====================================================== */
     int r = box;
     int x = 0;
     int y = r;
     int d = 1 - r;
 
+    QVector<QPoint> boundary;
+
     while (x <= y)
     {
-        // only y >= 0 → lower half
         int px[4] = { x,  y, -x, -y };
         int py[4] = { y,  x,  y,  x };
 
@@ -37,24 +38,23 @@ static void drawEggShape(QPainter &p, int cx, int cy, int box)
         {
             int gx = cx + px[i];
             int gy = cy + py[i];
-            if (gy >= cy)   // ensure lower half only
-                plot(gx, gy);
+            if (gy >= cy)
+                boundary.push_back({gx, gy});
         }
 
         x++;
-        if (d < 0)  d += 2*x + 1;
+        if (d < 0) d += 2*x + 1;
         else { y--; d += 2*(x - y) + 1; }
     }
 
     /* ======================================================
-       ELLIPSE TOP
-       (midpoint ellipse algorithm)
+       TOP ELLIPSE
+       (midpoint ellipse)
     ====================================================== */
-    int rx = box;           // horizontal
-    int ry = box * 1.5;     // vertical
+    int rx = box;
+    int ry = box * 1.5;
     int rx2 = rx * rx;
     int ry2 = ry * ry;
-
     int ex = 0;
     int ey = ry;
 
@@ -62,62 +62,71 @@ static void drawEggShape(QPainter &p, int cx, int cy, int box)
     int dx = 2 * ry2 * ex;
     int dy = 2 * rx2 * ey;
 
-    // Region 1
     while (dx < dy)
     {
-        int gx0 = cx + ex;
-        int gx1 = cx - ex;
-        int gy  = cy - ey;
-
-        if (gy <= cy) {   // upper half
-            plot(gx0, gy);
-            plot(gx1, gy);
-        }
+        boundary.push_back({cx + ex, cy - ey});
+        boundary.push_back({cx - ex, cy - ey});
 
         if (d1 < 0) {
             ex++;
-            dx += 2 * ry2;
+            dx += 2*ry2;
             d1 += dx + ry2;
         } else {
-            ex++;
-            ey--;
-            dx += 2 * ry2;
-            dy -= 2 * rx2;
+            ex++; ey--;
+            dx += 2*ry2;
+            dy -= 2*rx2;
             d1 += dx - dy + ry2;
         }
     }
 
-    // Region 2
     float d2 =
-        (ry2) * (ex + 0.5f) * (ex + 0.5f) +
-        (rx2) * (ey - 1) * (ey - 1) -
-        (rx2 * ry2);
+        (ry2)*(ex+0.5f)*(ex+0.5f) +
+        (rx2)*(ey-1)*(ey-1) -
+        (rx2*ry2);
 
     while (ey >= 0)
     {
-        int gx0 = cx + ex;
-        int gx1 = cx - ex;
-        int gy  = cy - ey;
-
-        if (gy <= cy) { // upper half only
-            plot(gx0, gy);
-            plot(gx1, gy);
-        }
+        boundary.push_back({cx + ex, cy - ey});
+        boundary.push_back({cx - ex, cy - ey});
 
         if (d2 > 0) {
             ey--;
-            dy -= 2 * rx2;
+            dy -= 2*rx2;
             d2 += rx2 - dy;
         } else {
-            ey--;
-            ex++;
-            dx += 2 * ry2;
-            dy -= 2 * rx2;
+            ey--; ex++;
+            dx += 2*ry2;
+            dy -= 2*rx2;
             d2 += dx - dy + rx2;
         }
     }
-}
 
+    /* ======================================================
+       FILL SCANLINES INSIDE
+    ====================================================== */
+    std::sort(boundary.begin(), boundary.end(),
+              [](auto &a, auto &b){
+                  return (a.y() == b.y()) ? a.x() < b.x() : a.y() < b.y();
+              });
+
+    int i = 0;
+    while (i < boundary.size())
+    {
+        int y = boundary[i].y();
+        QVector<int> xs;
+
+        while (i < boundary.size() && boundary[i].y() == y) {
+            xs.push_back(boundary[i].x());
+            i++;
+        }
+
+        std::sort(xs.begin(), xs.end());
+        for (int k = 0; k + 1 < xs.size(); k += 2) {
+            for (int xF = xs[k]; xF <= xs[k+1]; xF++)
+                plot(xF, y);
+        }
+    }
+}
 
 
 MainWindow::MainWindow(QWidget *parent)
@@ -137,7 +146,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     /* ------------------ background grid --------------------- */
     QPixmap bg(grid_size, grid_size);
-    bg.fill(Qt::black);
+    bg.fill(Qt::green);
     {
         QPainter g(&bg);
         g.setPen(QPen(Qt::darkGray, 1));
@@ -190,8 +199,8 @@ MainWindow::MainWindow(QWidget *parent)
     ------------------------------------------------------------ */
     dropColumns.clear();
     int mid = cols / 2;
-
-    dropColumns = { mid - 12, mid - 6, mid + 6, mid + 12 };
+    int gap = 40;  // increase to increase spacing
+    dropColumns = { mid - gap, mid - (gap/2), mid + (gap/2), mid + gap };
     std::sort(dropColumns.begin(), dropColumns.end());
 
     columnTimers.resize(dropColumns.size());
@@ -263,6 +272,8 @@ void MainWindow::keyReleaseEvent(QKeyEvent *event)
 ============================================================ */
 void MainWindow::resetGame()
 {
+    ui->scoreLabel->show();
+    ui->livesLabel->show();
     score = 0;
     lives = 3;
     eggs.clear();
@@ -302,6 +313,8 @@ void MainWindow::drawStartScreen()
 ============================================================ */
 void MainWindow::drawGameOver()
 {
+    ui->scoreLabel->hide();
+    ui->livesLabel->hide();
     QPixmap pix = background;
     QPainter p(&pix);
 
@@ -493,22 +506,44 @@ void MainWindow::drawGame(float alpha)
     int bx = qRound(basketRenderX);
     int by = qRound(basket.y());
 
-    QVector<QPoint> basketCells = {
-        {bx-3, by}, {bx-2, by}, {bx-1, by}, {bx, by}, {bx+1, by}, {bx+2, by}, {bx+3, by},
-        {bx-2, by+1}, {bx-1, by+1}, {bx, by+1}, {bx+1, by+1}, {bx+2, by+1},
-        {bx-1, by+2}, {bx, by+2}, {bx+1, by+2},
-        {bx, by+3}
-    };
-
     painter.setBrush(Qt::blue);
     painter.setPen(Qt::NoPen);
 
-    for (auto &cell : basketCells) {
-        int cx = std::clamp(cell.x(), 0, cols-1);
-        int cy = std::clamp(cell.y(), 0, rows-1);
+    int cx = bx;        // basket center (grid coords)
+    int cy = by;
+    int r  = 12;        // radius in grid cells → adjust size
 
-        QRectF r(cx * grid_box, cy * grid_box, grid_box, grid_box);
-        painter.fillRect(r, Qt::blue);
+    int x = 0;
+    int y = r;
+    int d = 1 - r;
+
+    /* midpoint circle — only lower half stored & plotted */
+    while (x <= y)
+    {
+        // four symmetric points for lower hemisphere
+        int px[4] = {  x,   y,  -x,  -y };
+        int py[4] = {  y,   x,   y,   x };
+
+        for (int i = 0; i < 4; i++)
+        {
+            int gx = cx + px[i];
+            int gy = cy + py[i];
+
+            if (gy >= cy)   // only lower half
+            {
+                gx = std::clamp(gx, 0, cols-1);
+                gy = std::clamp(gy, 0, rows-1);
+
+                painter.fillRect(gx * grid_box,
+                                 gy * grid_box,
+                                 grid_box, grid_box,
+                                 Qt::blue);
+            }
+        }
+
+        x++;
+        if (d < 0) d += 2*x + 1;
+        else { y--; d += 2*(x - y) + 1; }
     }
 
 
@@ -533,10 +568,8 @@ void MainWindow::drawGame(float alpha)
 
 
     /* ------------------- HUD ------------------- */
-    painter.setPen(Qt::white);
-    painter.setFont(QFont("Arial", 10));
-    painter.drawText(10, 20,
-                     QString("Score: %1   Lives: %2").arg(score).arg(lives));
+    ui->scoreLabel->setText(QString("Score: %1").arg(score));
+    ui->livesLabel->setText(QString("Lives: %1").arg(lives));
 
     painter.end();
     ui->frame->setPixmap(framePix);
