@@ -2,24 +2,46 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
-#include <QPixmap>
 #include <QTimer>
 #include <QElapsedTimer>
-#include <QKeyEvent>
-#include <QVector>
-#include <QPointF>
 #include <QSoundEffect>
+#include <QVector>
+#include <QPixmap>
+#include <QPointF>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
 
+// In mainwindow.h
+
+struct Egg {
+    QPointF pos;
+    float prevY;
+    float yVelocity;
+    QString state;
+    float animTimer = 0;
+    float scale = 1.0f;
+    float alpha = 1.0f;
+    QString type;    // "normal", "bad", "life"
+    QColor color;    // visual tint
+};
+struct Particle {
+    QPoint pos;      // integer position (grid units scaled)
+    QPoint velocity; // integer velocity (scaled)
+    int lifetime;    // in "ticks" (e.g., 60 = 1 second at 60 FPS)
+    int alpha;       // 0-255
+    QColor color;
+};
+
+
+
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
 public:
-    explicit MainWindow(QWidget *parent = nullptr);
-    ~MainWindow() override;
+    MainWindow(QWidget *parent = nullptr);
+    ~MainWindow();
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;
@@ -29,56 +51,69 @@ private slots:
     void gameTick();
 
 private:
+    QVector<Particle> particles;
+
+
+    int highScore;  // <--- Add this
+
     Ui::MainWindow *ui;
-    void drawGame(float alpha);
-    void drawGameOver();
-    void resetGame();
-    void drawStartScreen();
-    bool gameOver;
-    bool gameRunning = false;
-    // --- Grid / display ---
+    QTimer *gameTimer;
+    QElapsedTimer frameClock;
+
+    QPixmap background;
+
     int grid_box;
     int grid_size;
-    int cols, rows;
-    QPixmap background;
-    QVector<int> dropColumns;     // 4 centered columns
-    int currentColumnIndex;        // which column will spawn next
-    float globalSpawnTimer;        // counts time since last spawn
-    float spawnInterval;           // delay between spawns
-    QVector<float> columnTimers;       // timer accumulator per column
-    QVector<float> columnDelays;       // spawn delay per column (seconds)
+    int cols;
+    int rows;
 
-    // --- Basket ---
-    QPointF basket;     // subpixel position
-    float basketXVelocity = 0.0f;
-    float basketTargetVel = 0.0f;
-    float basketAccel = 20.0f;   // acceleration factor for smoothing
-    float basketMaxVel = 12.0f;  // max speed in cells/sec
+    float globalTime;
+    float globalSpawnTimer;
+    float spawnInterval;
     float lastEdgeSpawnTime;
     float edgeSpawnCooldown;
-    float globalTime;
-    // --- Eggs ---
-    QVector<QPointF> eggs;
 
-    // --- Sound ---
-    QSoundEffect soundCatch;
-    QSoundEffect soundLose;
+    int currentColumnIndex;
 
-    // --- Game state ---
+    QVector<int> dropColumns;
+    QVector<float> columnTimers;
+    QVector<float> columnDelays;
+
+    QVector<Egg> eggs;
+
+    QPointF basket;
+    float prevBasketX;
+    float basketXVelocity;
+    float basketTargetVel;
+    float basketAccel;
+    float basketMaxVel;
+
+    bool moveLeft;
+    bool moveRight;
+    float flashAlpha;
+    float flashFadeSpeed;
+    QColor flashColor;
+    float flashTimer;
+
+    float fixedDelta;
+    float accumulator;
+
+    bool gameOver;
+    bool gameRunning;
+
     int score;
     int lives;
 
-    // --- Timer / frame control ---
-    QTimer *gameTimer;
+    QSoundEffect soundCatch;
+    QSoundEffect soundLose;
+
+    // ---- Utility Methods ----
+    void resetGame();
     void updatePhysics(float dt);
-
-    // --- Input flags ---
-    bool moveLeft;
-    bool moveRight;
-    QElapsedTimer frameClock;
-    float accumulator = 0.0f;
-    float fixedDelta = 1.0f / 120.0f;  // logic update at 120 Hz (high precision)
-
+    void drawGame(float alpha);
+    void drawGameOver();
+    void drawStartScreen();
+    void drawEggShape(QPainter &p, const Egg &egg, float cellSize);
 };
 
 #endif // MAINWINDOW_H
