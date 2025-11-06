@@ -98,6 +98,14 @@ private:
     float fixedDelta;
     float accumulator;
 
+    float scoreScale = 1.0f;
+    float scoreAnimTimer = 0.0f;
+    bool scoreChanged = false;
+
+    float livesPulseTimer = 0.0f;
+    bool livesChanged = false;
+
+
     bool gameOver;
     bool gameRunning;
 
@@ -114,6 +122,8 @@ private:
     void drawGameOver();
     void drawStartScreen();
     void drawEggShape(QPainter &p, const Egg &egg, float cellSize);
+    void loadHighScore();
+    void saveHighScore();
 };
 
 #endif // MAINWINDOW_H
