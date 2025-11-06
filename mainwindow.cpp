@@ -7,6 +7,125 @@
 #include <algorithm>
 #include <QThread>
 #include <QDebug>
+static void drawEggShape(QPainter &p, int cx, int cy, int box)
+{
+    p.setBrush(Qt::white);
+    p.setPen(Qt::NoPen);
+
+    auto plot = [&](int gx, int gy){
+        p.fillRect(gx * box, gy * box, box, box, Qt::white);
+    };
+
+    /* ======================================================
+       SEMICIRCLE BOTTOM
+       (midpoint circle)
+    ====================================================== */
+    int r = box;
+    int x = 0;
+    int y = r;
+    int d = 1 - r;
+
+    QVector<QPoint> boundary;
+
+    while (x <= y)
+    {
+        int px[4] = { x,  y, -x, -y };
+        int py[4] = { y,  x,  y,  x };
+
+        for (int i = 0; i < 4; i++)
+        {
+            int gx = cx + px[i];
+            int gy = cy + py[i];
+            if (gy >= cy)
+                boundary.push_back({gx, gy});
+        }
+
+        x++;
+        if (d < 0) d += 2*x + 1;
+        else { y--; d += 2*(x - y) + 1; }
+    }
+
+    /* ======================================================
+       TOP ELLIPSE
+       (midpoint ellipse)
+    ====================================================== */
+    int rx = box;
+    int ry = box * 1.5;
+    int rx2 = rx * rx;
+    int ry2 = ry * ry;
+    int ex = 0;
+    int ey = ry;
+
+    float d1 = ry2 - rx2 * ry + (0.25f * rx2);
+    int dx = 2 * ry2 * ex;
+    int dy = 2 * rx2 * ey;
+
+    while (dx < dy)
+    {
+        boundary.push_back({cx + ex, cy - ey});
+        boundary.push_back({cx - ex, cy - ey});
+
+        if (d1 < 0) {
+            ex++;
+            dx += 2*ry2;
+            d1 += dx + ry2;
+        } else {
+            ex++; ey--;
+            dx += 2*ry2;
+            dy -= 2*rx2;
+            d1 += dx - dy + ry2;
+        }
+    }
+
+    float d2 =
+        (ry2)*(ex+0.5f)*(ex+0.5f) +
+        (rx2)*(ey-1)*(ey-1) -
+        (rx2*ry2);
+
+    while (ey >= 0)
+    {
+        boundary.push_back({cx + ex, cy - ey});
+        boundary.push_back({cx - ex, cy - ey});
+
+        if (d2 > 0) {
+            ey--;
+            dy -= 2*rx2;
+            d2 += rx2 - dy;
+        } else {
+            ey--; ex++;
+            dx += 2*ry2;
+            dy -= 2*rx2;
+            d2 += dx - dy + rx2;
+        }
+    }
+
+    /* ======================================================
+       FILL SCANLINES INSIDE
+    ====================================================== */
+    std::sort(boundary.begin(), boundary.end(),
+              [](auto &a, auto &b){
+                  return (a.y() == b.y()) ? a.x() < b.x() : a.y() < b.y();
+              });
+
+    int i = 0;
+    while (i < boundary.size())
+    {
+        int y = boundary[i].y();
+        QVector<int> xs;
+
+        while (i < boundary.size() && boundary[i].y() == y) {
+            xs.push_back(boundary[i].x());
+            i++;
+        }
+
+        std::sort(xs.begin(), xs.end());
+        for (int k = 0; k + 1 < xs.size(); k += 2) {
+            for (int xF = xs[k]; xF <= xs[k+1]; xF++)
+                plot(xF, y);
+        }
+    }
+}
+
 #include <QPainterPath>
 #include <QKeyEvent>
 
@@ -150,6 +269,8 @@ void MainWindow::keyReleaseEvent(QKeyEvent *event)
 
 void MainWindow::resetGame()
 {
+    ui->scoreLabel->show();
+    ui->livesLabel->show();
     score = 0;
     lives = 3;
     eggs.clear();
@@ -184,6 +305,8 @@ void MainWindow::drawStartScreen()
 
 void MainWindow::drawGameOver()
 {
+    ui->scoreLabel->hide();
+    ui->livesLabel->hide();
     QPixmap pix = background;
     QPainter p(&pix);
     p.setRenderHint(QPainter::Antialiasing, true);
