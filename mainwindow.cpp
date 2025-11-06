@@ -133,8 +133,8 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent),
     ui(new Ui::MainWindow),
     gameTimer(nullptr),
-    highScore(0),
     grid_box(6),
+    highScore(0),
     grid_size(600),
     cols(0),
     rows(0),
@@ -170,7 +170,7 @@ MainWindow::MainWindow(QWidget *parent)
         if (grid_size <= 0)
             grid_size = 600;
     }
-
+    loadHighScore();
     cols = qMax(40, grid_size / grid_box);
     rows = qMax(30, grid_size / grid_box);
 
@@ -202,7 +202,7 @@ MainWindow::MainWindow(QWidget *parent)
     // Drop columns
     dropColumns.clear();
     int mid = cols / 2;
-    dropColumns = {mid - 24, mid - 6, mid + 6, mid + 24};
+    dropColumns = {mid - 25, mid - 5, mid + 5, mid + 25};
     std::sort(dropColumns.begin(), dropColumns.end());
 
     columnTimers.resize(dropColumns.size());
@@ -229,6 +229,30 @@ MainWindow::~MainWindow()
 {
     delete ui;
 }
+
+#include <QFile>
+#include <QTextStream>
+
+void MainWindow::loadHighScore() {
+    QFile file("highscore.txt");
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QTextStream in(&file);
+        int savedScore = 0;
+        in >> savedScore;
+        highScore = savedScore;
+        file.close();
+    }
+}
+
+void MainWindow::saveHighScore() {
+    QFile file("highscore.txt");
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QTextStream out(&file);
+        out << highScore;
+        file.close();
+    }
+}
+
 
 void MainWindow::keyPressEvent(QKeyEvent *event)
 {
@@ -279,6 +303,7 @@ void MainWindow::resetGame()
     basketXVelocity = 0.0f;
     basketTargetVel = 0.0f;
     gameOver = false;
+    saveHighScore();
     moveRight = false;
     moveLeft = false;
     accumulator = 0.0f;
@@ -363,6 +388,21 @@ void MainWindow::gameTick()
         fpsTimer = 0;
     }
 
+
+    if (scoreAnimTimer > 0.0f) {
+        scoreAnimTimer -= dt;
+        float t = 1.0f - scoreAnimTimer / 0.2f;
+        scoreScale = 1.0f + 0.5f * (1.0f - t*t); // ease-out
+    } else {
+        scoreScale = 1.0f;
+        scoreChanged = false;
+    }
+
+    // Lives pulse animation decay
+    if (livesPulseTimer > 0.0f) {
+        livesPulseTimer -= dt;
+    }
+
 }
 
 
@@ -431,7 +471,7 @@ void MainWindow::updatePhysics(float dt)
 
     // -------------------- EGG PHYSICS --------------------
     float baseGravity = 18.0f + score* 0.1f;
-    float maxFallSpeed = 40.0f;
+    float maxFallSpeed = 35.0f;
 
     spawnInterval = qMax(0.3f, 0.8f - score * 0.02f);
 
@@ -449,15 +489,12 @@ void MainWindow::updatePhysics(float dt)
             egg.yVelocity = qMin(egg.yVelocity, maxFallSpeed);
             egg.pos.setY(egg.pos.y() + egg.yVelocity * dt);
 
-            // -------------------- FIXED COLLISION --------------------
-            // -------------------- FIXED COLLISION (Faster, Early Catch) --------------------
             int basketWidth = 16;
             int basketHeight = 6;
 
-            // Slightly enlarge detection area vertically for earlier catch
             QRectF basketRect(
                 basket.x() - basketWidth / 2.0f,
-                basket.y() - 1.5f,     // lifted upward to catch earlier
+                basket.y() - 0.5f,     // lifted upward to catch earlier
                 basketWidth,
                 basketHeight + 1.5f    // increased height slightly
                 );
@@ -505,7 +542,7 @@ void MainWindow::updatePhysics(float dt)
         }
         else if (egg.state == "splat" && egg.animTimer < 1) { // spawn once
             int numParticles = 12;
-            int scale = 1000; // fixed-point scaling
+            int scale = 1000;
             for (int i = 0; i < numParticles; ++i) {
                 int angleDeg = QRandomGenerator::global()->bounded(0, 360);
                 double rad = angleDeg * M_PI / 180.0;
@@ -546,6 +583,20 @@ void MainWindow::updatePhysics(float dt)
             flashAlpha = 0.0f;
         }
     }
+
+
+    if (caughtAny && !gameOver) {
+        scoreAnimTimer = 0.2f;   // duration of pulse
+        scoreScale = 1.5f;       // scale factor
+        scoreChanged = true;
+    }
+
+    if (lostAny || std::any_of(eggs.begin(), eggs.end(), [](const Egg &e){ return e.type == "life"; })) {
+        livesPulseTimer = 0.3f;
+        livesChanged = true;
+    }
+
+
     QVector<Particle> aliveParticles;
     int scale = 1000;
     for (auto &p : particles) {
@@ -559,55 +610,71 @@ void MainWindow::updatePhysics(float dt)
 
 }
 
-
-/* ============================================================
-    EGG DRAWING — Semicircle (bottom) + Ellipse (top)
-============================================================ */
-
 void MainWindow::drawEggShape(QPainter &p, const Egg &egg, float cellSize)
 {
-    p.setRenderHint(QPainter::Antialiasing, true);
+    p.setRenderHint(QPainter::Antialiasing, false); // pixelated look
+
     QPointF center((egg.pos.x() + 0.5f) * cellSize, (egg.pos.y() + 0.5f) * cellSize);
 
-    float baseW = cellSize * 1.5f* 1.5f;
-    float baseH = cellSize * 1.5f* 2.0f;
+    float baseW = cellSize *2.5f* 1.5f; // width scaling
+    float baseH = cellSize *2.5f* 2.0f; // height scaling
     float w = baseW * egg.scale;
     float h = baseH * egg.scale;
 
     QColor fillColor = egg.color;
-    QColor outlineColor = Qt::yellow;
     fillColor.setAlphaF(egg.alpha);
+    QColor outlineColor = Qt::yellow;
     outlineColor.setAlphaF(egg.alpha);
 
-    if (egg.type == "life") {
-        QRadialGradient grad(center, w * 0.6f);
-        grad.setColorAt(0, QColor(255, 182, 193, 180));
-        grad.setColorAt(1, QColor(255, 105, 180, 40));
-        p.setBrush(grad);
-    } else {
-        p.setBrush(fillColor);
+    int step = 1; // pixel step
+
+    // Lambda to draw a pixel
+    auto plot = [&](int gx, int gy) {
+        p.fillRect(center.x() + gx, center.y() + gy, step, step, fillColor);
+    };
+
+
+    for (int yi = -h/2; yi <= h/2; yi += step)
+    {
+        float yf = float(yi) / (h/2);
+
+        float modifier = (yf < 0) ? (1.0f - 0.3f * yf * yf) : (1.0f + 0.1f * yf);
+
+        int xSpan = int((w/2) * sqrt(1 - yf * yf) * modifier);
+
+        for (int xi = -xSpan; xi <= xSpan; xi += step)
+        {
+            plot(xi, yi);
+        }
     }
 
-    fillColor.setAlphaF(egg.alpha);
-    outlineColor.setAlphaF(egg.alpha);
+    p.setBrush(outlineColor);
+    for (int yi = -h/2; yi <= h/2; yi += step)
+    {
+        float yf = float(yi) / (h/2);
+        float modifier = (yf < 0) ? (1.0f - 0.3f * yf * yf) : (1.0f + 0.1f * yf);
+        int xSpan = int((w/2) * sqrt(1 - yf * yf) * modifier);
 
-    if (egg.state == "splat") {
-        // Flattened splat look
-        QRectF splatRect(center.x() - w * 0.5f, center.y() - h * 0.25f, w, h * 0.4f);
-        p.setBrush(fillColor);
+        // left & right edges
+        p.fillRect(center.x() - xSpan, center.y() + yi, step, step, outlineColor);
+        p.fillRect(center.x() + xSpan, center.y() + yi, step, step, outlineColor);
+    }
+
+    if (egg.state == "splat")
+    {
+        int splatW = int(w);
+        int splatH = int(h * 0.4f);
+        QRectF splatRect(center.x() - splatW / 2, center.y() - splatH / 2, splatW, splatH);
+        p.fillRect(splatRect, fillColor);
         p.setPen(QPen(outlineColor, 2.0));
-        p.drawEllipse(splatRect);
-    } else {
-        QRectF eggRect(center.x() - w * 0.5f, center.y() - h * 0.45f, w, h);
-        p.setBrush(fillColor);
-        p.setPen(QPen(outlineColor, 2.0));
-        p.drawEllipse(eggRect);
+        p.drawRect(splatRect);
     }
 }
 
+
+
 void MainWindow::drawGame(float alpha)
 {
-
 
     QPixmap framePix = background;
     QPainter painter(&framePix);
@@ -679,12 +746,48 @@ void MainWindow::drawGame(float alpha)
     }
 
     // HUD
-    painter.setPen(Qt::white);
-    painter.setFont(QFont("Arial", 20, QFont::Bold));
-    painter.drawText(20, 40, QString("Score: %1").arg(score));
-    painter.drawText(framePix.width() - 150, 40, QString("Lives: %1").arg(lives));
-    painter.drawText(20, 70, QString("High Score: %1").arg(highScore)); // <--- add this
+    // Score with pulse
+    painter.setFont(QFont("Comic Sans MS", 24, QFont::Bold));
+    QColor scoreColor(255, 215, 0); // gold
+    painter.setPen(scoreColor);
 
+    painter.save();
+    QPointF scorePos(30, 45);
+    painter.translate(scorePos);
+    painter.scale(scoreScale, scoreScale);
+    painter.drawText(QPointF(0, 0), QString("Score: %1").arg(score));
+    painter.restore();
+
+
+    QFont highFont("Arial", 18, QFont::Bold);
+    painter.setFont(highFont);
+    QColor highColor(200, 200, 255); // soft blue
+    painter.setPen(highColor);
+    painter.drawText(30, 75, QString("High Score: %1").arg(highScore));
+
+    // Lives Display (hearts with pulse)
+    int heartSize = 24;
+    float pulseScale = 1.0f + 0.5f * (livesPulseTimer / 0.3f); // scale while pulse active
+    for (int i = 0; i < lives; ++i) {
+        int x = framePix.width() - 40 - i * (heartSize + 5);
+        int y = 20;
+
+        QPainterPath heartPath;
+        heartPath.moveTo(x + heartSize/2.0, y + heartSize/5.0);
+        heartPath.cubicTo(x + heartSize/2.0, y, x, y, x, y + heartSize/3.0);
+        heartPath.cubicTo(x, y + heartSize*0.8, x + heartSize/2.0, y + heartSize, x + heartSize/2.0, y + heartSize*0.9);
+        heartPath.cubicTo(x + heartSize/2.0, y + heartSize, x + heartSize, y + heartSize*0.8, x + heartSize, y + heartSize/3.0);
+        heartPath.cubicTo(x + heartSize, y, x + heartSize/2.0, y, x + heartSize/2.0, y + heartSize/5.0);
+
+        painter.save();
+        painter.translate(x + heartSize/2.0, y + heartSize/2.0);
+        painter.scale(pulseScale, pulseScale);
+        painter.translate(-(x + heartSize/2.0), -(y + heartSize/2.0));
+        painter.setBrush(Qt::red);
+        painter.setPen(Qt::NoPen);
+        painter.drawPath(heartPath);
+        painter.restore();
+    }
 
     painter.setPen(Qt::NoPen);
     for (auto &p : particles) {
